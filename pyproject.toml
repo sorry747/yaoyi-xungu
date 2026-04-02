@@ -12,23 +12,23 @@ dependencies = [
     "langgraph-prebuilt==1.0.2",
     "langgraph-sdk==0.2.9",
     "langsmith==0.4.39",
-    
+
     # === Web 框架 ===
     "fastapi>=0.121,<1",
     "uvicorn>=0.38,<1",
     "streamlit>=1.55.0",
-    
+
     # === 数据处理 ===
     "pandas>=2.2,<3",
     "openpyxl>=3.1,<4",
-    
+
     # === 数据库 ===
     "SQLAlchemy>=2.0,<3",
     "psycopg2-binary>=2.9,<3",
     "langgraph-checkpoint-postgres>=3.0,<4",
     "psycopg[binary]>=3.3,<4",
     "psycopg-pool>=3.3,<4",
-    
+
     # === 工具库 ===
     "pydantic>=2.12,<3",
     "Jinja2>=3.1,<4",
@@ -37,19 +37,12 @@ dependencies = [
     "boto3>=1.40,<2",
     "chardet>=5.2,<6",
     "rich>=14,<15",
-    
+
     # === Coze SDK ===
     "coze-coding-utils>=0.2.6,<1",
     "coze-workload-identity>=0.1.4,<1",
     "cozeloop>=0.1.25,<1",
     "coze-coding-dev-sdk>0.5.0,<1",
-    
-    # === 已移除的包（编译问题，不需要）===
-    # opencv-python: 图片处理，瑶医训诂不需要
-    # Pillow: 图片处理，瑶医训诂不需要
-    # pypdf: PDF 处理，瑶医训诂不需要
-    # docx2python: Word 处理，瑶医训诂不需要
-    # python-pptx: PPT 处理，瑶医训诂不需要
 ]
 
 [tool.uv]
