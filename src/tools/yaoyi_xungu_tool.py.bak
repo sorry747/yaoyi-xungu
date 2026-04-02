@@ -1,0 +1,305 @@
+"""
+瑶医古语训诂工具
+支持形训、音训、义训、文化溯源、草药关联、今译注释六维度训诂分析
+"""
+import json
+import os
+import time
+from typing import Dict
+from langchain.tools import tool
+from coze_coding_dev_sdk import LLMClient
+from coze_coding_utils.runtime_ctx.context import new_context
+
+# 语料库路径
+CORPUS_PATH = os.path.join(os.getenv("COZE_WORKSPACE_PATH", "/workspace/projects"), "assets/yaoyi_corpus.json")
+
+def load_corpus() -> Dict:
+    """加载瑶医语料库"""
+    try:
+        if os.path.exists(CORPUS_PATH):
+            with open(CORPUS_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def save_corpus(corpus: Dict):
+    """保存瑶医语料库"""
+    try:
+        os.makedirs(os.path.dirname(CORPUS_PATH), exist_ok=True)
+        with open(CORPUS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(corpus, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"保存语料库失败: {e}")
+
+@tool
+def yaoyi_xungu(analyze_text: str) -> str:
+    """
+    对瑶医养生古语进行六维度训诂分析
+
+    Args:
+        analyze_text: 需要训诂的瑶医古语文本
+
+    Returns:
+        JSON格式的训诂结果，包含：
+        - 原文：输入的古语文本
+        - 形训：字形、生僻字、异体字分析
+        - 音训：字音、读音、方言音注分析
+        - 义训：语义、核心概念解读
+        - 文化溯源：文化背景、传承来源
+        - 草药关联：关联的瑶医草药及功效
+        - 今译注释：现代汉语注释
+    """
+    ctx = new_context(method="yaoyi_xungu")
+    client = LLMClient(ctx=ctx)
+
+    # 训诂系统提示词
+    system_prompt = """你是专业的瑶医养生古语训诂专家，精通古汉语训诂学（形训、音训、义训）和广西瑶医文化。
+
+你的任务是对输入的瑶医养生古语进行专业、全面的六维度训诂分析。
+
+## 训诂六维度规范：
+
+### 1. 形训（字形分析）
+- 识别生僻字、异体字、通假字
+- 分析字形结构、笔画特征
+- 标注标准字形和异体字形关系
+- 说明字形的文化内涵
+
+### 2. 音训（字音分析）
+- 提供标准普通话读音（带拼音）
+- 标注古音、方言音（如瑶语发音）
+- 分析音韵关系（声韵调）
+- 说明音训的训诂依据
+
+### 3. 义训（语义解释）
+- 逐词训诂，解释每个词的含义
+- 分析句子的核心语义
+- 揭示词义的引申、比喻用法
+- 说明义训的训诂逻辑
+
+### 4. 文化溯源（文化背景）
+- 追溯古语的文化来源（瑶族传统、习俗）
+- 说明在瑶医养生体系中的地位
+- 关联相关的瑶医理论、养生理念
+- 传承路径和地域特色（如广西巴马、金秀大瑶山）
+
+### 5. 草药关联（瑶医草药）
+- 识别古语中涉及的瑶医草药（如苍术、佩兰、艾草、薄荷、陈皮等）
+- 说明每味草药的功效、性味、归经
+- 解释草药与养生古语的对应关系
+- 提供草药的配伍禁忌和注意事项
+
+### 6. 今译注释（现代汉语）
+- 准确、通顺的现代汉语翻译
+- 保留原文的文化内涵和韵味
+- 必要时添加括号注释说明
+- 确保翻译符合学术严谨性要求
+
+## 输出格式要求：
+严格按照以下JSON格式输出，不要添加任何额外文字：
+
+```json
+{
+  "原文": "输入的古语文本",
+  "形训": "详细的字形分析内容",
+  "音训": "详细的字音分析内容",
+  "义训": "详细的语义解释内容",
+  "文化溯源": "详细的文化背景分析内容",
+  "草药关联": "详细的草药关联分析内容",
+  "今译注释": "准确的现代汉语翻译"
+}
+```
+
+## 注意事项：
+1. 保持学术严谨性，训诂要有据可依
+2. 突出瑶医特色，关联广西地域文化
+3. 草药信息要准确，注明性味归经
+4. 输出必须是纯JSON格式，不要添加markdown标记或其他说明
+5. 每个维度都要详细、准确、完整
+"""
+
+    user_message = f"""请对以下瑶医养生古语进行六维度训诂分析：
+
+{analyze_text}
+
+严格按照JSON格式输出训诂结果。"""
+
+    # 重试机制：最多重试3次
+    max_retries = 3
+    retry_delay = 2  # 秒
+
+    for attempt in range(max_retries):
+        try:
+            print(f"[DEBUG] 尝试第 {attempt + 1} 次LLM调用...")
+
+            response = client.invoke(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message}
+                ],
+                model="doubao-seed-2-0-lite-260215",
+                temperature=0.7
+            )
+
+            print(f"[DEBUG] LLM调用成功，开始处理响应...")
+
+            # 提取响应内容
+            content = response.content
+            if isinstance(content, list):
+                # 处理多模态响应
+                text_parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        text_parts.append(item.get("text", ""))
+                content = " ".join(text_parts)
+            elif not isinstance(content, str):
+                content = str(content)
+
+            print(f"[DEBUG] 响应内容长度: {len(content)}")
+
+            # 清理可能的markdown标记
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+
+            print(f"[DEBUG] 清理后内容长度: {len(content)}")
+
+            # 验证JSON格式
+            try:
+                result = json.loads(content)
+                print(f"[DEBUG] JSON解析成功")
+
+                # 添加到语料库
+                corpus = load_corpus()
+                if analyze_text not in corpus:
+                    corpus[analyze_text] = result
+                    save_corpus(corpus)
+                    print(f"[DEBUG] 已保存到语料库")
+
+                return json.dumps(result, ensure_ascii=False, indent=2)
+
+            except json.JSONDecodeError as e:
+                print(f"[ERROR] JSON解析失败: {e}")
+                # 如果JSON解析失败，返回原始内容
+                return json.dumps({
+                    "error": "JSON解析失败",
+                    "error_detail": str(e),
+                    "raw_content": content[:500] + "..." if len(content) > 500 else content,
+                    "原文": analyze_text
+                }, ensure_ascii=False, indent=2)
+
+        except ConnectionError as e:
+            print(f"[ERROR] 网络连接错误（尝试 {attempt + 1}/{max_retries}）: {e}")
+            if attempt < max_retries - 1:
+                print(f"[INFO] {retry_delay} 秒后重试...")
+                time.sleep(retry_delay)
+            else:
+                return json.dumps({
+                    "error": "网络连接失败，请检查网络设置",
+                    "error_detail": str(e),
+                    "原文": analyze_text,
+                    "retry_count": max_retries
+                }, ensure_ascii=False, indent=2)
+
+        except TimeoutError as e:
+            print(f"[ERROR] 请求超时（尝试 {attempt + 1}/{max_retries}）: {e}")
+            if attempt < max_retries - 1:
+                print(f"[INFO] {retry_delay} 秒后重试...")
+                time.sleep(retry_delay)
+            else:
+                return json.dumps({
+                    "error": "请求超时，请稍后重试",
+                    "error_detail": str(e),
+                    "原文": analyze_text,
+                    "retry_count": max_retries
+                }, ensure_ascii=False, indent=2)
+
+        except Exception as e:
+            print(f"[ERROR] LLM调用异常（尝试 {attempt + 1}/{max_retries}）: {type(e).__name__}: {e}")
+            if attempt < max_retries - 1:
+                print(f"[INFO] {retry_delay} 秒后重试...")
+                time.sleep(retry_delay)
+            else:
+                return json.dumps({
+                    "error": f"训诂分析失败: {type(e).__name__}",
+                    "error_detail": str(e),
+                    "原文": analyze_text,
+                    "retry_count": max_retries
+                }, ensure_ascii=False, indent=2)
+
+@tool
+def query_corpus(keyword: str) -> str:
+    """
+    查询瑶医语料库中匹配的古语
+
+    Args:
+        keyword: 查询关键词
+
+    Returns:
+        JSON格式的查询结果
+    """
+    corpus = load_corpus()
+
+    results = []
+    for text, analysis in corpus.items():
+        if keyword in text or keyword in str(analysis):
+            results.append({
+                "原文": text,
+                "训诂摘要": analysis.get("今译注释", "")[:100]
+            })
+
+    if not results:
+        return json.dumps({"message": "未找到匹配的古语，建议使用训诂功能分析新古语"}, ensure_ascii=False, indent=2)
+
+    return json.dumps({
+        "总数": len(results),
+        "结果": results[:10]  # 最多返回10条
+    }, ensure_ascii=False, indent=2)
+
+@tool
+def get_corpus_stats() -> str:
+    """
+    获取语料库统计信息
+
+    Returns:
+        JSON格式的统计信息
+    """
+    corpus = load_corpus()
+
+    stats = {
+        "古语总数": len(corpus),
+        "涉及草药": [],
+        "文化来源": []
+    }
+
+    # 统计草药和文化来源
+    for text, analysis in corpus.items():
+        # 确保analysis是字典类型
+        if not isinstance(analysis, dict):
+            continue
+
+        herbs = analysis.get("草药关联", "")
+        culture = analysis.get("文化溯源", "")
+
+        if herbs and "草" in herbs:
+            # 提取草药名称（简单提取包含"草"的词汇）
+            import re
+            herb_matches = re.findall(r'[苍佩艾薄陈桂草药]+[术兰叶皮桂等]', herbs)
+            for herb in herb_matches:
+                if herb not in stats["涉及草药"]:
+                    stats["涉及草药"].append(herb)
+
+        if culture and "广西" in culture:
+            # 提取地域信息
+            if "巴马" in culture and "巴马" not in stats["文化来源"]:
+                stats["文化来源"].append("巴马瑶族自治县")
+            if "金秀" in culture and "金秀" not in stats["文化来源"]:
+                stats["文化来源"].append("金秀大瑶山")
+
+    return json.dumps(stats, ensure_ascii=False, indent=2)
